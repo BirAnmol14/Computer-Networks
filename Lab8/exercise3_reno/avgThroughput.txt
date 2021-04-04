@@ -1,0 +1,2 @@
+Avg TCP throughput : 0.207846 MBits/sec
+Avg UDP throughput : 1.252939 Mbits/sec

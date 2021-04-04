@@ -1,0 +1,40 @@
+Use: 
+http://www.ktiwari.in/CSF303/lab1_first_page.htm
+http://www.ktiwari.in/CSF303/lab1_second_page.htm
+http://www.ktiwari.in/CSF303/lab1_third_page.htm
+http://www.ktiwari.in/CSF303/lab1_fourth_page.htm
+http://www.ktiwari.in/CSF303/lab1_fifth_page.htm
+
+EXPERIMENT 1:
+1. \r carriage return \n new line character
+2. \r\n or empty line
+3. HTTP 1.1 , it is necessary since you need to determine the persistent/non persistent nature. 
+4. Persistent requests 
+5. Easily visible
+6. TCP6 on port 80
+7. Visible via TCP (dest: 80)
+8. Subtract the times or can read time since request
+9. Date is current one and last modified is for content on the server
+10. Since in between two hosts, there can many intermediate nodes thus the host/destination address is needed.
+11. GET desti:80 and OK's src:80 
+12. Response in frame for get indicates the frame that brings back the response of the request from the server
+
+Experiment 2:
+1 & 2. 3 - one is for html page and 2 for images
+3. 200 OK
+4. 13th January 2020
+5. 118 byte html + 114016 bytes for images
+6. i.lite ii. Locally cached bcoz no request for images was sent and the request containted 'if modified since' header
+7. i. The url for that image is invalid and is not found on the server 
+ii. NO, files -> CSF303 se
+
+Experiment 3:
+Q1. Cached locally and rendered differently fifth page since images were loaded from same location for 4th page
+
+Experiment 6:
+1. 30 indermediate nodes are maximum it is used to prevent infinite rounting. 
+2. Since PC sends 3 packets to each node, thus each packet has its own latency, thus you get 3 time values (RTT - round trip time values)
+3.
+Experiment 7:
+1. Asterisk (*) under RTT means that the packet did not return. This does not necessarily mean packet loss as many Internet routers may intentionally discard ping commands.
+2. Delhi destiantion was reached and it was the public ip of the website but BITS timeout since many routers and firewalls block the icmp echo and bloclk from udp calls to reach.
