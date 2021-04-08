@@ -14,27 +14,24 @@ BEGIN {
  seq_no = $11; 
  packet_id = $12; 
  if ( packet_id > highest_packet_id ) highest_packet_id = packet_id; 
- # getting start time is not a problem, provided you're not starting 
- # traffic at 0.0. 
- # could test for sending node_1_address or flow_id here. 
- if ( start_time[packet_id] == 0 ) start_time[packet_id] = time; 
  
- # only useful for small unicast where packet_id doesn't wrap. 
- # checking receive means avoiding recording drops 
+ if(node_1 == 1 && node_1_address == 1.0 && node_2_address == 3.0){
+	if ( start_time[packet_id] == 0 ) start_time[packet_id] = time; 
+ }
+ 
  if ( action != "d" ) { 
- if ( action == "r" && node_2 ==3 && node_1_address == 1.0 && (node_2_address == 3.0) { 
- # could test for receiving node_2_address or flow_id here. 
- end_time[packet_id] = time; 
+ if ( action == "r" && node_2 ==3 && node_1_address == 1.0 && node_2_address == 3.0) { 
+	end_time[packet_id] = time; 
  } 
  } else { 
- end_time[packet_id] = -1; 
+	end_time[packet_id] = -1; 
  } 
 } 
 END { 
  for ( packet_id = 0; packet_id <= highest_packet_id; packet_id++ ) { 
- start = start_time[packet_id]; 
- end = end_time[packet_id]; 
- packet_duration = end - start; 
- if ( start < end ) printf("%f %f\n", start, packet_duration); 
+	start = start_time[packet_id]; 
+	end = end_time[packet_id]; 
+	packet_duration = end - start; 
+	if ( start < end ) printf("%f %f\n", start, packet_duration); 
  } 
 }
