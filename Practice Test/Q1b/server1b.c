@@ -110,7 +110,6 @@ int main(){
 		FILE * fp = fopen(fname,"w");
 	
 		int n;
-		int done = 0;
 		
 		fd_set rset;
 		FD_ZERO(&rset);
@@ -118,176 +117,70 @@ int main(){
 		FD_SET(confd1,&rset);
 		
 		int max = confd0>confd1?confd0:confd1;
-		int last_seq =-1 ;
-		int last_ack=0;//last in order ACK
-		BUF buffer;
-		buffer.buf;
-		buffer.count = 1;
-		buffer.last = -1;
-		int buffered=0;
-		int isPending1=1;
-		int isPending0 = 1;
+		int pending[2];
+		pending[0] = pending[1] = 1;
+		int sock[2];
+		sock[0] = confd0;
+		sock[1] = confd1;
+		int done = 0;
+		int last_seq=-1;
 		while(1){
-			printf("Last Inorder:%d last seq:%d\n",last_ack,last_seq);
-			if(done && !buffered && (last_ack == last_seq)){
-				puts("Here");
+			PKT rcv[2];
+			PKT snd[2];
+			if(done){
 				break;
-			}	
-			if(done && buffered){
-				if(last_ack + PACKET_SIZE == ntohl(buffer.buf[0].seq_no)){
-					for(int i=0;i<buffered;i++){
-						last_ack = ntohl(buffer.buf[i].seq_no);
-						fprintf(fp,"%s",buffer.buf[i].payload);
-						memset(buffer.buf[i].payload,'\0',payloadSize);
-					}
+			}
+			max = -1;
+			for(int i=0;i<2;i++){
+				memset(rcv[i].payload,'\0',payloadSize);
+				memset(snd[i].payload,'\0',payloadSize);
+				snd[i].seq_no=-1;
+				if(pending[i]){
+				//Await data
+				FD_SET(sock[i],&rset);
+					if(max<sock[i])max=sock[i];
 				}
 			}
-			int max = -1;
-			if(isPending0){
-				FD_SET(confd0,&rset);
-				max = max>confd0?max:confd0;
-			}
-			if(isPending1){
-				FD_SET(confd1,&rset);
-				max = max>confd0?max:confd0;
-			}
-			
-			//rcv packets from client till the end
 			select(max+1,&rset,NULL,NULL,NULL);
-			
-			if(FD_ISSET(confd0,&rset)){
-				PKT rcv;
-				PKT ack;
-				int confd = confd0;
-				if((n = recv(confd0,&rcv,sizeof(rcv),0))>0){
-					printStatus(0,&rcv);
-					delay(100);
-					if(rcv.TYPE == 'D'){
-							//DATA pkt rcv
-							if(rcv.lst_pkt == '1'){
-								//last pkt
-								done = 1;
-								last_seq = ntohl(rcv.seq_no);
-								FD_CLR(confd0,&rset);
-							}else{
-								done =0 ;
-								FD_SET(confd0,&rset);
-							}
-							
-							if(last_ack+PACKET_SIZE == ntohl(rcv.seq_no)){
-									//In order
-									last_ack = ntohl(rcv.seq_no);
-									fprintf(fp,"%s",rcv.payload);
-									if(buffered && last_ack + PACKET_SIZE == ntohl(buffer.buf[0].seq_no)){
-										for(int i=0;i<buffered;i++){
-											last_ack = ntohl(buffer.buf[i].seq_no);
-											fprintf(fp,"%s",buffer.buf[i].payload);
-											memset(buffer.buf[i].payload,'\0',payloadSize);
-										}
-										buffered = 0;
-										buffer.last = -1;
-									}
-							}else{
-									//Buffer the Packet
-									buffered++;
-									buffer.last++;
-									if(buffer.last > buffer.count){
-											buffer.count = buffer.count+1;
-					
-									}
-									buffer.buf[buffer.last] = rcv;
-									strcpy(buffer.buf[buffer.last].payload,rcv.payload);
-							}
-							memset(rcv.payload,'\0',payloadSize);
-							
-							//SEND ACK
-							ack.seq_no = rcv.seq_no;
-							ack.size = htonl(0);
-							ack.channel = htonl(0);
-							memset(ack.payload,'\0',payloadSize);
-							ack.lst_pkt = rcv.lst_pkt;
-							ack.TYPE = 'A';
-							r = send(confd0,&ack,sizeof(ack),0);
-							if(r<0){die("SEND Error");}
-							printStatus(1,&ack);
+			for(int i=0;i<2;i++){	
+				if(FD_ISSET(sock[i],&rset)){
+					if((n=recv(sock[i],&rcv[i],sizeof(PKT),0))>0){
+						printStatus(0,&rcv[i]);
+						snd[i].size = htonl(0);
+						snd[i].seq_no = rcv[i].seq_no;
+						snd[i].channel = rcv[i].channel;
+						snd[i].TYPE = 'A';
+						snd[i].lst_pkt = rcv[i].lst_pkt;
+						if(rcv[i].lst_pkt=='1'){
+							//last data received
+							last_seq = ntohl(rcv[i].seq_no);
+							FD_CLR(sock[i],&rset);
+							pending[i] = 0;
+						}
+						fprintf(fp,"%s",rcv[i].payload);
+						delay(100);
+					}else if(n==0){
+						//close(sock[i]);
 					}else{
-						close(confd0);
-						close(lsock);
-						die("Corrupt Client");
-					}
-				}
-				else if(n==0){
-					close(confd0);
-				}
-			}if(FD_ISSET(confd1,&rset)){
-				
-				PKT rcv;
-				PKT ack;
-				int confd = confd1;
-				if((n = recv(confd1,&rcv,sizeof(rcv),0))>0){
-					delay(100);
-					printStatus(0,&rcv);
-					if(rcv.TYPE == 'D'){
-							//DATA pkt rcv
-							if(rcv.lst_pkt == '1'){
-								//last pkt
-								done = 1;
-								last_seq = ntohl(rcv.seq_no);
-								FD_CLR(confd1,&rset);
-							}else{
-								done =0 ;
-								FD_SET(confd1,&rset);
-							}
-
-							if(last_ack+PACKET_SIZE == ntohl(rcv.seq_no)){
-									//In order
-									last_ack = ntohl(rcv.seq_no);
-									fprintf(fp,"%s",rcv.payload);
-									if(buffered && last_ack + PACKET_SIZE == ntohl(buffer.buf[0].seq_no)){
-										for(int i=0;i<buffered;i++){
-											last_ack = ntohl(buffer.buf[i].seq_no);
-											fprintf(fp,"%s",buffer.buf[i].payload);
-											memset(buffer.buf[i].payload,'\0',payloadSize);
-										}
-										buffered = 0;
-										buffer.last = -1;
-									}
-							}else{
-									//Buffer the Packet
-									buffered++;
-									buffer.last++;
-									if(buffer.last > buffer.count){
-											buffer.count = buffer.count+1;
-									}
-									buffer.buf[buffer.last] = rcv;
-									strcpy(buffer.buf[buffer.last].payload,rcv.payload);
-							}
-							memset(rcv.payload,'\0',payloadSize);
-							
-							//SEND ACK
-							ack.seq_no = rcv.seq_no;
-							ack.size = htonl(0);
-							ack.channel = htonl(1);
-							memset(ack.payload,'\0',payloadSize);
-							ack.lst_pkt = rcv.lst_pkt;
-							ack.TYPE = 'A';
-							r = send(confd1,&ack,sizeof(ack),0);
-							if(r<0){die("SEND Error");}
-							printStatus(1,&ack);
-					}else{
-						close(confd1);
-						close(lsock);
-						die("Corrupt Client");
-					}
-				}else if(n==0){
-					close(confd1);
+						die("Recv Error");
+					}						
 				}
 			}
-		}		
+			for(int i=0;i<2;i++){
+				//send ACK
+				if(snd[i].seq_no==-1){
+					continue;
+				}
+				send(sock[i],&snd[i],sizeof(PKT),0);
+				printStatus(1,&snd[i]);
+				if(ntohl(snd[i].seq_no)==last_seq){
+					//last ack sent
+					done = 1;
+				}
+			}
+		}
 		fclose(fp);
 		printf("%s created successfully!\n",fname);
-		close(confd1);
-		close(confd0);
 		file++;
 	}
 	

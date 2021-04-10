@@ -32,7 +32,7 @@ typedef struct pkt{
 	char TYPE;// 'D'->data, 'A'->ack
 	char payload[P_SIZE-3*sizeof(int)-2*sizeof(char)];
 }PKT;
-PKT curr;
+
 void die(char * c){
 		perror(c);
 		exit(1);
@@ -60,28 +60,24 @@ void printStatus(int type, PKT *p){
 			return;
 	}
 }
-void SEND(int sock,PKT * p,int PACKET_SIZE,int type){
+void SEND(int sock,PKT * p){
 	int r;
-	if(type == 0){
-		//send data
-		usleep(100*1000);
-		r = send(sock,p,sizeof(PKT),0);
-		if(r<0){die("SEND Error");}
-		printStatus(type,p);
-		usleep(100*1000);
-	}
+	//send data
+	usleep(100*1000);
+	r = send(sock,p,sizeof(PKT),0);
+	if(r<0){die("SEND Error");}
+	printStatus(0,p);
+	usleep(100*1000);
+	
 }
 int main(){
 	int PACKET_SIZE = P_SIZE;
-	
+	PKT curr;
 	int headerSize =  sizeof(curr.size)+sizeof(curr.seq_no)+ sizeof(curr.channel)+sizeof(curr.lst_pkt)+sizeof(curr.TYPE);
 	int payloadSize = PACKET_SIZE - headerSize;
-	
 	if(payloadSize<=0){
 		die("Invalid Packet Size");
 	}
-	
-	memset(curr.payload,'\0',payloadSize);
 	
 	//create 2 TCP socket
 	int sock0 = socket(PF_INET,SOCK_STREAM,IPPROTO_TCP);
@@ -106,144 +102,127 @@ int main(){
 	//Open file
 	int fd = open(FILENAME,O_RDONLY);
 	if(fd<0){die("Unable to read file");}
-	
+	int pending[2];
+	pending[0]=0;
+	pending[1]=0;
+	PKT rcv[2];
 	int n;
 	int seq = 0;
 	int fdone = 0;
+	for(int i=0;i<2;i++){
+		int sock;
+		if(i==0){
+			sock = sock0;
+		}else{
+			sock = sock1;
+		}
+		PKT p;
+		memset(p.payload,'\0',payloadSize);
+		if((n=read(fd,p.payload,payloadSize))>0){
+			p.seq_no = htonl(seq);
+			p.size = htonl(n);
+			p.channel = htonl(i);
+			p.TYPE = 'D';
+			p.lst_pkt = '0';
+			SEND(sock,&p);
+			seq += sizeof(PKT);
+			pending[i] = 1;
+		}else if(n==0){
+			p.seq_no = htonl(seq);
+			p.size = htonl(n);
+			p.channel = htonl(i);
+			p.TYPE = 'D';
+			p.lst_pkt = '1';
+			SEND(sock,&p);
+			seq += sizeof(PKT);
+			pending[i] = 1;
+			fdone = 1;
+		}else{
+			die("file read error");
+		}
+	}
 	fd_set rset;
 	FD_ZERO(&rset);
 	FD_SET(sock0,&rset);
 	FD_SET(sock1,&rset);
 	int max = sock0>sock1?sock0:sock1;
-	for(int i=0;i<2;i++){
-		int sock;
-		if(i==0){
-			
-			sock = sock0;
-			curr.channel = htonl(0);
-		}else{
-			sock = sock1;
-			curr.channel = htonl(1);
-		}
-		if((n=read(fd,curr.payload,payloadSize))>=0){
-			curr.seq_no = htonl(seq);
-			curr.size = htonl(n);
-			curr.TYPE = 'D';
-			if(n==0){
-				//EOF
-				curr.lst_pkt = '1';
-				fdone = 1;
-			}else{
-				curr.lst_pkt ='0';
-			}
-			SEND(sock,&curr,PACKET_SIZE,0);
-			seq+=sizeof(PKT);
-		}else{
-			die("Send Error");
-		}
-	}
-	int isPending0=1;
-	int isPending1=1;
 	int done = 0;
+	int left = 2;
 	while(1){
-			if(done && !isPending0 && !isPending1){
-				break;
+			if(done && fdone){
+					break;
 			}
-			int max = -1;
-			if(isPending0){
+			max = -1;
+			if(pending[0]){
+				//Ack pending
 				FD_SET(sock0,&rset);
-				max = max>sock0?max:sock0;
+				if(max<sock0)max=sock0;
 			}
-			if(isPending1){
+			if(pending[1]){
 				FD_SET(sock1,&rset);
-				max = max>sock1?max:sock1;
+				if(max<sock1)max=sock1;
 			}
-			//recv ACK
 			select(max+1,&rset,NULL,NULL,NULL);
-			if(FD_ISSET(sock0,&rset) ){
-				int sock = sock0;
-				//ACK on sock0
-				PKT rcv;
-				PKT curr;
-				r = recv(sock,&rcv,sizeof(rcv),0);
-				if(r<0){
-					die("Recv error");
-				}
-				if(r==0){
-					puts("Server terminated Connection");
-					close(sock0);
-				}
-				if(rcv.TYPE == 'A'){
-						isPending0=0;
-						printStatus(2,&rcv);
-						if(rcv.lst_pkt == '1'){
-							done = 1;
-							FD_CLR(sock0,&rset);
-							continue;
-						}
-						if(!done &&(n=read(fd,curr.payload,payloadSize))>=0){
-							curr.seq_no = htonl(seq);
-							curr.size = htonl(n);
-							curr.channel = htonl(0);
-							curr.TYPE = 'D';
-							if(n==0){
-								//EOF
-								curr.lst_pkt = '1';
-								fdone = 1;
-							}else{
-								curr.lst_pkt ='0';
-							}
-							SEND(sock,&curr,PACKET_SIZE,0);
-							isPending0 = 1;
-							seq+=sizeof(PKT);
-						}else{
-							die("Send Error");
-						}
+			for(int i=0;i<2;i++){
+				int sock;
+				if(i==0){
+					sock = sock0;
 				}else{
-					die("SERVER CORRUPT RESPONSE");
+					sock = sock1;
+				}		
+				if(FD_ISSET(sock,&rset)){
+					if((n=recv(sock,&rcv[i],sizeof(PKT),0))>0){
+						printStatus(2,&rcv[i]);
+						pending[i] = 0;
+						if(rcv[i].lst_pkt=='1'){
+							//last ack received
+							done = 1;
+							FD_CLR(sock,&rset);
+						}
+						left--;
+					}else if(n==0){
+						close(sock);
+					}else{
+						die("Recv Error");
+					}						
 				}
 			}
-			if(FD_ISSET(sock1,&rset) ){
-				int sock = sock1;
-				//ACK on sock1
-				PKT rcv;
-				PKT curr;
-				r = recv(sock,&rcv,sizeof(rcv),0);
-				if(r<0){
-					die("Recv error");
+			for(int i=0;i<2;i++){
+				if(fdone || done){
+						break;
 				}
-				if(r==0){
-					puts("Server terminated Connection");
-					close(sock);
+				if(pending[i]){
+					continue;
 				}
-				if(rcv.TYPE == 'A'){
-						isPending1=0;
-						printStatus(2,&rcv);
-						if(rcv.lst_pkt == '1'){
-							done = 1;
-							FD_CLR(sock1,&rset);
-							continue;
-						}
-						if(!done && (n=read(fd,curr.payload,payloadSize))>=0){
-							curr.seq_no = htonl(seq);
-							curr.size = htonl(n);
-							curr.channel = htonl(1);
-							curr.TYPE = 'D';
-							if(n==0){
-								//EOF
-								curr.lst_pkt = '1';
-								fdone = 1;
-							}else{
-								curr.lst_pkt ='0';
-							}
-							SEND(sock,&curr,PACKET_SIZE,0);
-							isPending1 = 1;
-							seq+=sizeof(PKT);
-						}else{
-							die("Send Error");
-						}
+				int sock;
+				if(i==0){
+					sock = sock0;
 				}else{
-					die("SERVER CORRUPT RESPONSE");
+					sock = sock1;
+				}
+				PKT p;
+				memset(p.payload,'\0',payloadSize);
+				if((n=read(fd,p.payload,payloadSize))>0){
+					p.seq_no = htonl(seq);
+					p.size = htonl(n);
+					p.channel = htonl(i);
+					p.TYPE = 'D';
+					p.lst_pkt = '0';
+					SEND(sock,&p);
+					seq += sizeof(PKT);
+					pending[i] = 1;
+				}else if(n==0){
+					p.seq_no = htonl(seq);
+					p.size = htonl(n);
+					p.channel = htonl(i);
+					p.TYPE = 'D';
+					p.lst_pkt = '1';
+					SEND(sock,&p);
+					seq += sizeof(PKT);
+					pending[i] = 1;
+					fdone = 1;
+				}else{
+					die("file read error");
 				}
 			}
 	}
