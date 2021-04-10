@@ -26,7 +26,7 @@ typedef struct pkt{
 	int seq_no;
 	char lst_pkt;// '1' -> last ; '0' -> not last
 	char TYPE;// 'D'->data, 'A'->ack
-	char payload[P_SIZE];
+	char payload[P_SIZE-2*sizeof(int)-2*sizeof(char)];
 }PKT;
 
 void die(char * c){
@@ -46,7 +46,7 @@ int randomDrop(int PDR){
 void printStatus(int type, PKT *p){
 	if(type == 0){
 			//RCVD PKT
-			printf("RCVD PKT: Seq. No. = %d,Packet Size= %d ,Payload Size = %d\n",ntohl(p->seq_no),sizeof(PKT),ntohl(p->size));
+			printf("RCVD PKT: Seq. No. = %d,Packet Size= %ld ,Payload Size = %d\n",ntohl(p->seq_no),sizeof(PKT),ntohl(p->size));
 			return;
 	}
 	if(type == 1){
@@ -64,10 +64,10 @@ void printStatus(int type, PKT *p){
 
 int main(){
 	int PACKET_SIZE = P_SIZE;
-	int PDR = 7;// 1-> 10 %, 2-> 20% and so on
+	int PDR = 4;// 1-> 10 %, 2-> 20% and so on
 	PKT ack,rcv;	
 	int headerSize =  sizeof(ack.size) +  sizeof(ack.seq_no)+ sizeof(ack.lst_pkt)+sizeof(ack.TYPE);
-	int payloadSize = PACKET_SIZE ;
+	int payloadSize = PACKET_SIZE -headerSize ;
 	int LISTQ=5;
 	if(payloadSize<=0){
 		die("Invalid Packet Size");
@@ -157,6 +157,7 @@ int main(){
 		FILE * fp = fopen(fname,"w");
 		fprintf(fp,"%s",buf);
 		fclose(fp);
+		printf("%s created successfully!\n",fname);
 		file++;
 	}
 	

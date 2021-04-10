@@ -29,7 +29,7 @@ typedef struct pkt{
 	int seq_no;
 	char lst_pkt;// '1' -> last ; '0' -> not last
 	char TYPE;// 'D'->data, 'A'->ack
-	char payload[P_SIZE];
+	char payload[P_SIZE-2*sizeof(int)-2*sizeof(char)];
 }PKT;
 int gsock;
 int g_pktSiz;
@@ -53,12 +53,12 @@ void backup(PKT *p1,PKT *p2){
 void printStatus(int type, PKT *p){
 	if(type == 0){
 			//SENT PKT
-			printf("SENT PKT: Seq. No. = %d,Packet Size= %d ,Payload Size = %d\n",ntohl(p->seq_no),sizeof(PKT),ntohl(p->size));
+			printf("SENT PKT: Seq. No. = %d,Packet Size= %ld ,Payload Size = %d\n",ntohl(p->seq_no),sizeof(PKT),ntohl(p->size));
 			return;
 	}
 	if(type == 1){
 			//RE_TRANSMIT PKT
-			printf("RE_TRANSMIT PKT: Seq. No. = %d,Packet Size= %d ,Payload Size = %d\n",ntohl(p->seq_no),sizeof(PKT),ntohl(p->size));
+			printf("RE_TRANSMIT PKT: Seq. No. = %d,Packet Size= %ld ,Payload Size = %d\n",ntohl(p->seq_no),sizeof(PKT),ntohl(p->size));
 			return;
 	}
 	if(type == 2){
@@ -93,7 +93,7 @@ int main(){
 	int PACKET_SIZE = P_SIZE;
 	g_pktSiz = PACKET_SIZE;
 	int headerSize =  sizeof(curr.size) +  sizeof(curr.seq_no)+ sizeof(curr.lst_pkt)+sizeof(curr.TYPE);
-	int payloadSize = PACKET_SIZE;
+	int payloadSize = PACKET_SIZE - headerSize;
 	gpayLoad = payloadSize;
 	if(payloadSize<=0){
 		die("Invalid Packet Size");
